@@ -1,0 +1,43 @@
+name: Publier NARDO (site web installable)
+
+# Utilisation depuis un téléphone :
+# 1. Mets NARDO_site_web.zip sur Google Drive, partage « Tous les utilisateurs disposant du lien », copie le lien.
+# 2. Dans ce dépôt GitHub : Settings → Secrets and variables → Actions → Variables → New repository variable
+#    Nom : NARDO_SITE_ZIP_URL   Valeur : le lien Drive.
+# 3. Settings → Pages → Source : « GitHub Actions ».
+# 4. Onglet Actions → « Publier NARDO » → Run workflow. L'adresse du site s'affiche à la fin (étape « Déployer »).
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Télécharger le site depuis le lien fourni
+        env:
+          NARDO_SITE_ZIP_URL: ${{ vars.NARDO_SITE_ZIP_URL }}
+        run: |
+          test -n "$NARDO_SITE_ZIP_URL" || { echo "Variable NARDO_SITE_ZIP_URL manquante"; exit 1; }
+          pip install -q gdown
+          case "$NARDO_SITE_ZIP_URL" in
+            *drive.google.com*) gdown --fuzzy "$NARDO_SITE_ZIP_URL" -O site.zip ;;
+            *) curl -L "$NARDO_SITE_ZIP_URL" -o site.zip ;;
+          esac
+          mkdir -p site && unzip -q site.zip -d site
+          test -f site/index.html || { echo "index.html introuvable dans le zip"; exit 1; }
+      - name: Préparer la publication
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+      - name: Déployer
+        id: deployment
+        uses: actions/deploy-pages@v4
