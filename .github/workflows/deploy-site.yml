@@ -1,12 +1,5 @@
 name: Publier NARDO (site web installable)
 
-# Utilisation depuis un téléphone :
-# 1. Mets NARDO_site_web.zip sur Google Drive, partage « Tous les utilisateurs disposant du lien », copie le lien.
-# 2. Dans ce dépôt GitHub : Settings → Secrets and variables → Actions → Variables → New repository variable
-#    Nom : NARDO_SITE_ZIP_URL   Valeur : le lien Drive.
-# 3. Settings → Pages → Source : « GitHub Actions ».
-# 4. Onglet Actions → « Publier NARDO » → Run workflow. L'adresse du site s'affiche à la fin (étape « Déployer »).
-
 on:
   workflow_dispatch:
 
@@ -26,14 +19,27 @@ jobs:
         env:
           NARDO_SITE_ZIP_URL: ${{ vars.NARDO_SITE_ZIP_URL }}
         run: |
+          set -x
           test -n "$NARDO_SITE_ZIP_URL" || { echo "Variable NARDO_SITE_ZIP_URL manquante"; exit 1; }
-          pip install -q gdown
-          case "$NARDO_SITE_ZIP_URL" in
-            *drive.google.com*) gdown --fuzzy "$NARDO_SITE_ZIP_URL" -O site.zip ;;
-            *) curl -L "$NARDO_SITE_ZIP_URL" -o site.zip ;;
-          esac
+          echo "Lien reçu : $NARDO_SITE_ZIP_URL"
+          ID=$(echo "$NARDO_SITE_ZIP_URL" | sed -n 's#.*/d/\([^/?]*\).*#\1#p')
+          if [ -z "$ID" ]; then ID=$(echo "$NARDO_SITE_ZIP_URL" | sed -n 's#.*[?&]id=\([^&]*\).*#\1#p'); fi
+          echo "Identifiant Drive : $ID"
+          if [ -n "$ID" ]; then
+            curl -L --fail --retry 3 -o site.zip "https://drive.usercontent.google.com/download?id=${ID}&export=download&confirm=t" || true
+          fi
+          if ! unzip -tq site.zip >/dev/null 2>&1; then
+            echo "Téléchargement direct incomplet, essai avec gdown…"
+            pip install -q --upgrade gdown
+            rm -f site.zip
+            gdown "$ID" -O site.zip
+          fi
+          ls -la site.zip
+          file site.zip
+          unzip -tq site.zip
           mkdir -p site && unzip -q site.zip -d site
           test -f site/index.html || { echo "index.html introuvable dans le zip"; exit 1; }
+          echo "Site prêt : $(du -sh site | cut -f1)"
       - name: Préparer la publication
         uses: actions/upload-pages-artifact@v3
         with:
